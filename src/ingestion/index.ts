@@ -30,7 +30,7 @@ export async function ingestDocument(
   try {
     await env.R2_IMAGES.put(`raw/${docId}/${file.name}`, file);
 
-    const parseResult = await parseDocument(file, env);
+    const parseResult = await parseDocument(file, docId, env);
     const allChunks = parseResult.pages.flatMap(page =>
       chunkDocument(page.text, docId, page.pageNumber)
     );
