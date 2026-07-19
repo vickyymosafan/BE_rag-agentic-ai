@@ -15,6 +15,7 @@ import { decomposeQuery } from './asi/sub-question';
 import { selfCritic } from './asi/critic';
 import { correctiveRAG } from './asi/corrective';
 import { multiHopRetrieve } from './asi/multi-hop';
+import { invalidateDocCache } from './asi/cache-invalidation';
 import { trackRPDCall, checkRPDLimit, getRPDStats } from './utils/rpd-tracker';
 import { getTopCachedQueries } from './asi/cache';
 import { recordFeedback, getPopularFAQ } from './asi/feedback';
@@ -57,7 +58,9 @@ app.post('/api/admin/documents', zValidator('json', z.object({
 });
 
 app.delete('/api/admin/documents/:id', async (c) => {
-  await softDeleteDocument(c.req.param('id'), c.env);
+  const docId = c.req.param('id');
+  await invalidateDocCache(docId, c.env);
+  await softDeleteDocument(docId, c.env);
   return c.json({ success: true });
 });
 
