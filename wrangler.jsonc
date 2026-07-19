@@ -1,0 +1,50 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rag-ai-agentic",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "minify": true,
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "ENVIRONMENT": "production"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "rag-ai-db",
+      "database_id": "rag-ai-db"
+    }
+  ],
+  "vectorize": [
+    {
+      "binding": "VECTORIZE",
+      "index_name": "rag-ai-vectors"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "KV_CACHE",
+      "id": "kv-cache"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "R2_IMAGES",
+      "bucket_name": "rag-ai-images"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "binding": "RATE_LIMITER",
+        "class_name": "RateLimiterDO"
+      }
+    ]
+  },
+  "migrations": {
+    "tag": "v1"
+  }
+}
