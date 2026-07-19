@@ -13,11 +13,67 @@ import { callWithFallback } from './asi/router';
 import { decomposeQuery } from './asi/sub-question';
 import { selfCritic } from './asi/critic';
 import { correctiveRAG } from './asi/corrective';
-import { trackRPDCall, checkRPDLimit } from './utils/rpd-tracker';
+import { trackRPDCall, checkRPDLimit, getRPDStats } from './utils/rpd-tracker';
+import { getTopCachedQueries } from './asi/cache';
+import {
+  listDocuments,
+  getDocument,
+  createDocument,
+  softDeleteDocument,
+  getDocumentVersions,
+} from './db/admin-queries';
 
 const app = new Hono<{ Bindings: CloudflareBindings }>();
 
 app.use('/api/*', rateLimitMiddleware);
+
+// === Admin: Document Management ===
+
+app.get('/api/admin/documents', async (c) => {
+  const docs = await listDocuments(c.env);
+  return c.json({ documents: docs });
+});
+
+app.get('/api/admin/documents/:id', async (c) => {
+  const doc = await getDocument(c.req.param('id'), c.env);
+  if (!doc) return c.json({ error: 'Document not found' }, 404);
+  return c.json({ document: doc });
+});
+
+app.post('/api/admin/documents', zValidator('json', z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  filename: z.string().min(1),
+  type: z.string().min(1),
+})), async (c) => {
+  const { id, title, filename, type } = c.req.valid('json');
+  await createDocument({ id, title, filename, type }, c.env);
+  return c.json({ success: true, id }, 201);
+});
+
+app.delete('/api/admin/documents/:id', async (c) => {
+  await softDeleteDocument(c.req.param('id'), c.env);
+  return c.json({ success: true });
+});
+
+app.get('/api/admin/documents/:id/versions', async (c) => {
+  const versions = await getDocumentVersions(c.req.param('id'), c.env);
+  return c.json({ versions });
+});
+
+// === Admin: Usage Analytics ===
+
+app.get('/api/admin/stats/rpd', async (c) => {
+  const days = parseInt(c.req.query('days') || '7', 10);
+  const stats = await getRPDStats(c.env, Math.min(days, 30));
+  return c.json({ stats });
+});
+
+app.get('/api/admin/cache/top', async (c) => {
+  const limit = parseInt(c.req.query('limit') || '10', 10);
+  const top = await getTopCachedQueries(c.env, Math.min(limit, 50));
+  return c.json({ queries: top });
+});
 
 const querySchema = z.object({
   query: z.string().min(1).max(1000),
