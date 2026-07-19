@@ -15,6 +15,7 @@ import { selfCritic } from './asi/critic';
 import { correctiveRAG } from './asi/corrective';
 import { trackRPDCall, checkRPDLimit, getRPDStats } from './utils/rpd-tracker';
 import { getTopCachedQueries } from './asi/cache';
+import { recordFeedback, getPopularFAQ } from './asi/feedback';
 import {
   listDocuments,
   getDocument,
@@ -321,5 +322,25 @@ const route = app.post('/api/rag/query', zValidator('json', querySchema), async 
   }
 });
 
-export type AppType = typeof route;
+// === Feedback ===
+
+app.post('/api/rag/feedback', zValidator('json', z.object({
+  query: z.string().min(1),
+  userId: z.string().min(1),
+  rating: z.enum(['up', 'down']),
+})), async (c) => {
+  const { query, userId, rating } = c.req.valid('json');
+  await recordFeedback(query, userId, rating, c.env);
+  return c.json({ success: true });
+});
+
+// === Admin: FAQ ===
+
+app.get('/api/admin/faq', async (c) => {
+  const limit = parseInt(c.req.query('limit') || '10', 10);
+  const faq = await getPopularFAQ(c.env, Math.min(limit, 50));
+  return c.json({ faq });
+});
+
+export type AppType = typeof app;
 export default app;
