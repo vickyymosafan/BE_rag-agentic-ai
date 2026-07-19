@@ -12,6 +12,7 @@ export interface CloudflareBindings {
   COHERE_API_KEY?: string;
   OPENROUTER_API_KEY?: string;
   JWT_SECRET?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
 }
 
 export type QueryType = 'text' | 'image' | 'table' | 'complex' | 'hybrid';
