@@ -9,8 +9,8 @@ export async function rateLimitMiddleware(
   const doId = c.env.RATE_LIMITER.idFromName(userId);
   const stub = c.env.RATE_LIMITER.get(doId);
 
-  const res = await stub.fetch(new Request('http://internal/check'));
-  const { allowed, count } = await res.json() as { allowed: boolean; count: number };
+  const res = await stub.fetch('http://internal/check');
+  const { allowed } = await res.json() as { allowed: boolean; count: number };
 
   if (!allowed) {
     return c.json({
@@ -20,6 +20,5 @@ export async function rateLimitMiddleware(
     }, 429);
   }
 
-  c.set('rateLimitCount', count);
   await next();
 }

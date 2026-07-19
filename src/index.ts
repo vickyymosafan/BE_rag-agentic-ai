@@ -13,9 +13,11 @@ import { callWithFallback } from './asi/router';
 import { decomposeQuery } from './asi/sub-question';
 import { selfCritic } from './asi/critic';
 import { correctiveRAG } from './asi/corrective';
+import { multiHopRetrieve } from './asi/multi-hop';
 import { trackRPDCall, checkRPDLimit, getRPDStats } from './utils/rpd-tracker';
 import { getTopCachedQueries } from './asi/cache';
 import { recordFeedback, getPopularFAQ } from './asi/feedback';
+import { ingestDocument } from './ingestion/index';
 import {
   listDocuments,
   getDocument,
@@ -92,9 +94,13 @@ const route = app.post('/api/rag/query', zValidator('json', querySchema), async 
     if (cached) {
       reasoningPath.push('Cache hit: L1 exact match');
       return c.json({
-        ...cached,
+        answer: cached.response,
+        citations: cached.citations,
+        confidence: cached.score,
+        asiScore: cached.asiScore,
         reasoningPath: [...cached.reasoningPath, ...reasoningPath],
-      } as QueryResponse);
+        sources: cached.sources,
+      });
     }
 
     const geminiBudget = await checkRPDLimit('gemini', env);
@@ -152,8 +158,17 @@ const route = app.post('/api/rag/query', zValidator('json', querySchema), async 
       searchQueries.map(q => adaptiveRetrieve(q, queryType, env, documentIds))
     );
     const flatResults = allResults.flat().sort((a, b) => b.score - a.score);
-    const topResults = flatResults.slice(0, 10);
+    let topResults = flatResults.slice(0, 10);
     reasoningPath.push(`Hybrid retrieval: ${topResults.length} chunks retrieved`);
+
+    if (queryType === 'complex' || shouldAbstain(topResults)) {
+      const { results: hopResults, hops } = await multiHopRetrieve(query, queryType, env, documentIds);
+      if (hops.length > 0) {
+        topResults = hopResults;
+        reasoningPath.push(...hops);
+        reasoningPath.push(`Multi-hop: ${topResults.length} chunks after ${hops.length} hop(s)`);
+      }
+    }
 
     if (shouldAbstain(topResults)) {
       reasoningPath.push('Retrieval score below abstain threshold (< 0.55)');
@@ -332,6 +347,30 @@ app.post('/api/rag/feedback', zValidator('json', z.object({
   const { query, userId, rating } = c.req.valid('json');
   await recordFeedback(query, userId, rating, c.env);
   return c.json({ success: true });
+});
+
+// === Document Ingestion ===
+
+app.post('/api/admin/documents/upload', async (c) => {
+  const body = await c.req.parseBody();
+  const file = body['file'] as File | undefined;
+  const docId = body['docId'] as string | undefined;
+  const title = body['title'] as string | undefined;
+
+  if (!file || !docId || !title) {
+    return c.json({ error: 'Missing required fields: file, docId, title' }, 400);
+  }
+
+  if (!file.name.endsWith('.pdf') && !file.name.endsWith('.docx')) {
+    return c.json({ error: 'Only PDF and DOCX files are supported' }, 400);
+  }
+
+  try {
+    const result = await ingestDocument(file, docId, title, 'admin', c.env);
+    return c.json({ success: true, ...result }, 201);
+  } catch (err) {
+    return c.json({ error: `Ingestion failed: ${err instanceof Error ? err.message : 'Unknown'}` }, 500);
+  }
 });
 
 // === Admin: FAQ ===

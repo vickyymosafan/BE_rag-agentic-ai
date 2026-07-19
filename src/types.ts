@@ -1,11 +1,11 @@
-import type { DurableObjectNamespace } from '@cloudflare/workers-types';
+import type { DurableObjectNamespace, DurableObject } from '@cloudflare/workers-types';
 
 export interface CloudflareBindings {
   DB: D1Database;
   VECTORIZE: VectorizeIndex;
   KV_CACHE: KVNamespace;
   R2_IMAGES: R2Bucket;
-  RATE_LIMITER: DurableObjectNamespace<RateLimiterDO>;
+  RATE_LIMITER: DurableObjectNamespace;
   ENVIRONMENT: string;
   GEMINI_API_KEY?: string;
   GROQ_API_KEY?: string;
@@ -83,7 +83,7 @@ export interface RewriterOutput {
   variants: string[];
 }
 
-export class RateLimiterDO implements DurableObject {
+export class RateLimiterDO {
   state: DurableObjectState;
   count: number;
   resetTime: number;
