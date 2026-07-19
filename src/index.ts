@@ -9,6 +9,7 @@ import { generateAnswer, generateCohere, generateOpenRouter } from './asi/genera
 import { shouldAnswer, shouldAbstain, buildCitations, validateGrounding } from './asi/grounding';
 import { getFromCache, setCache } from './asi/cache';
 import { rateLimitMiddleware } from './middleware/rate-limiter';
+import { adminAuth } from './middleware/auth';
 import { callWithFallback } from './asi/router';
 import { decomposeQuery } from './asi/sub-question';
 import { selfCritic } from './asi/critic';
@@ -26,9 +27,10 @@ import {
   getDocumentVersions,
 } from './db/admin-queries';
 
-const app = new Hono<{ Bindings: CloudflareBindings }>();
+const app = new Hono<{ Bindings: CloudflareBindings; Variables: { userId: string } }>();
 
 app.use('/api/*', rateLimitMiddleware);
+app.use('/api/admin/*', adminAuth);
 
 // === Admin: Document Management ===
 
