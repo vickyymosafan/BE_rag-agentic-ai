@@ -5,7 +5,7 @@ import type { CloudflareBindings, QueryRequest, QueryResponse } from './types';
 import { classifyQuery } from './asi/classifier';
 import { rewriteAndExpand } from './asi/rewriter';
 import { adaptiveRetrieve } from './asi/retrieval';
-import { generateAnswer } from './asi/generator';
+import { generateAnswer, generateCohere, generateOpenRouter } from './asi/generator';
 import { shouldAnswer, shouldAbstain, buildCitations, validateGrounding } from './asi/grounding';
 import { getFromCache, setCache } from './asi/cache';
 import { rateLimitMiddleware } from './middleware/rate-limiter';
@@ -186,6 +186,8 @@ const route = app.post('/api/rag/query', zValidator('json', querySchema), async 
     reasoningPath.push(`Citations built: ${citations.length} sources`);
 
     const generateFn = () => generateAnswer(query, context, citations.map(c => `${c.docName}, Hal ${c.page}`), env);
+    const cohereFn = () => generateCohere(query, context, citations.map(c => `${c.docName}, Hal ${c.page}`), env);
+    const openrouterFn = () => generateOpenRouter(query, context, citations.map(c => `${c.docName}, Hal ${c.page}`), env);
 
     let answer = await callWithFallback(
       async () => {
@@ -193,10 +195,20 @@ const route = app.post('/api/rag/query', zValidator('json', querySchema), async 
         await trackRPDCall('gemini', env);
         return result;
       },
-      async () => {
-        reasoningPath.push('Fallback: Groq emergency generate');
-        return `[Maaf, layanan primary tidak tersedia]\n\nBerdasarkan dokumen yang tersedia:\n\n${context.slice(0, 1000)}`;
-      },
+      async () => callWithFallback(
+        cohereFn,
+        async () => callWithFallback(
+          openrouterFn,
+          async () => {
+            reasoningPath.push('Fallback: all providers failed');
+            return `[Maaf, semua layanan tidak tersedia]\n\nBerdasarkan dokumen yang tersedia:\n\n${context.slice(0, 1000)}`;
+          },
+          'openrouter',
+          25000
+        ),
+        'cohere',
+        20000
+      ),
       'gemini',
       15000
     );

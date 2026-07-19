@@ -70,3 +70,88 @@ ATURAN KETAT:
 
   return text;
 }
+
+const COHERE_API_URL = 'https://api.cohere.ai/v1/chat';
+
+export async function generateCohere(
+  query: string,
+  context: string,
+  citations: string[],
+  env: CloudflareBindings
+): Promise<string> {
+  const apiKey = env.COHERE_API_KEY;
+  if (!apiKey) throw new Error('COHERE_API_KEY not configured');
+
+  const res = await fetch(COHERE_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'command-a-03-2025',
+      message: query,
+      documents: [{ text: context }],
+      preamble: `Anda adalah asisten akademik. Jawab HANYA dari konteks yang diberikan.
+Setiap klaim WAJIB menyertakan sumber: [Nama Dokumen, Hal X]
+Jika informasi tidak ditemukan, katakan "Maaf, informasi tersebut tidak ditemukan dalam dokumen yang tersedia."
+CITATION: ${citations.join('\n')}`,
+      temperature: 0.2,
+      max_tokens: 2048,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error('Cohere Generate error:', err);
+    throw new Error(`Cohere generate failed: ${res.status}`);
+  }
+
+  const data = await res.json() as { text?: string };
+  return data.text || 'Maaf, terjadi kesalahan saat menghasilkan jawaban.';
+}
+
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+export async function generateOpenRouter(
+  query: string,
+  context: string,
+  citations: string[],
+  env: CloudflareBindings
+): Promise<string> {
+  const apiKey = env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY not configured');
+
+  const systemPrompt = `Anda adalah asisten akademik. Jawab HANYA dari konteks yang diberikan.
+Setiap klaim WAJIB menyertakan sumber.
+Jika informasi tidak ditemukan, abstain.`;
+
+  const res = await fetch(OPENROUTER_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer': 'https://rag-ai-agentic.vercel.app',
+    },
+    body: JSON.stringify({
+      model: 'google/gemma-2-27b-it',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `KONTEKS:\n${context}\n\nPERTANYAAN: ${query}\n\nCITATIONS:\n${citations.join('\n')}` },
+      ],
+      temperature: 0.2,
+      max_tokens: 2048,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error('OpenRouter Generate error:', err);
+    throw new Error(`OpenRouter generate failed: ${res.status}`);
+  }
+
+  const data = await res.json() as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  return data.choices?.[0]?.message?.content || 'Maaf, terjadi kesalahan.';
+}

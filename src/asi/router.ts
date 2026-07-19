@@ -4,6 +4,7 @@ const TIMEOUTS = {
   gemini: 15000,
   groq: 10000,
   cohere: 20000,
+  openrouter: 25000,
 };
 
 class CircuitBreaker {
@@ -34,15 +35,18 @@ class CircuitBreaker {
 const geminiBreaker = new CircuitBreaker();
 const groqBreaker = new CircuitBreaker();
 const cohereBreaker = new CircuitBreaker();
+const openrouterBreaker = new CircuitBreaker();
 
 export async function callWithFallback<T>(
   primary: () => Promise<T>,
   fallback: () => Promise<T>,
-  provider: 'gemini' | 'groq' | 'cohere',
+  provider: 'gemini' | 'groq' | 'cohere' | 'openrouter',
   timeoutMs: number
 ): Promise<T> {
   const breaker = provider === 'gemini' ? geminiBreaker
-    : provider === 'groq' ? groqBreaker : cohereBreaker;
+    : provider === 'groq' ? groqBreaker
+    : provider === 'cohere' ? cohereBreaker
+    : openrouterBreaker;
 
   if (breaker.isOpen()) {
     console.warn(`Circuit breaker open for ${provider}, skipping to fallback`);
