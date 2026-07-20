@@ -41,6 +41,10 @@
       {
         "binding": "RATE_LIMITER",
         "class_name": "RateLimiterDO"
+      },
+      {
+        "binding": "PROVIDER_RATE_LIMITER",
+        "class_name": "ProviderRateLimiterDO"
       }
     ]
   },

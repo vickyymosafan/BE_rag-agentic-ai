@@ -8,7 +8,7 @@ import { adaptiveRetrieve } from './asi/retrieval';
 import { generateAnswer, generateCohere, generateOpenRouter } from './asi/generator';
 import { shouldAnswer, shouldAbstain, buildCitations, validateGrounding } from './asi/grounding';
 import { getFromCache, setCache } from './asi/cache';
-import { rateLimitMiddleware } from './middleware/rate-limiter';
+import { rateLimitMiddleware, checkProviderRateLimit } from './middleware/rate-limiter';
 import { adminAuth } from './middleware/auth';
 import { callWithFallback } from './asi/router';
 import { decomposeQuery } from './asi/sub-question';
@@ -196,12 +196,23 @@ const route = app.post('/api/rag/query', zValidator('json', querySchema), async 
     const { citations, sources, context } = await buildCitations(topResults, env);
     reasoningPath.push(`Citations built: ${citations.length} sources`);
 
+    const geminiLimit = await checkProviderRateLimit('gemini', env);
+    if (!geminiLimit.allowed) {
+      reasoningPath.push(`Gemini global RPM limit reached (${geminiLimit.remaining || 0} remaining)`);
+    }
+
+    const groqLimit = await checkProviderRateLimit('groq', env);
+    if (!groqLimit.allowed) {
+      reasoningPath.push(`Groq global RPM limit reached (${groqLimit.remaining || 0} remaining)`);
+    }
+
     const generateFn = () => generateAnswer(query, context, citations.map(c => `${c.docName}, Hal ${c.page}`), env);
     const cohereFn = () => generateCohere(query, context, citations.map(c => `${c.docName}, Hal ${c.page}`), env);
     const openrouterFn = () => generateOpenRouter(query, context, citations.map(c => `${c.docName}, Hal ${c.page}`), env);
 
     let answer = await callWithFallback(
       async () => {
+        if (!geminiLimit.allowed) throw new Error('Gemini RPM limit exceeded');
         const result = await generateFn();
         await trackRPDCall('gemini', env);
         return result;

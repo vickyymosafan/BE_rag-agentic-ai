@@ -6,6 +6,7 @@ export interface CloudflareBindings {
   KV_CACHE: KVNamespace;
   R2_IMAGES: R2Bucket;
   RATE_LIMITER: DurableObjectNamespace;
+  PROVIDER_RATE_LIMITER: DurableObjectNamespace;
   ENVIRONMENT: string;
   GEMINI_API_KEY?: string;
   GROQ_API_KEY?: string;
@@ -104,6 +105,38 @@ export class RateLimiterDO {
     this.count++;
     const allowed = this.count <= 20;
     return new Response(JSON.stringify({ allowed, count: this.count }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+export class ProviderRateLimiterDO {
+  state: DurableObjectState;
+  counts: Record<string, { count: number; resetTime: number }>;
+
+  constructor(state: DurableObjectState) {
+    this.state = state;
+    this.counts = {};
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const provider = url.searchParams.get('provider') || 'gemini';
+    const now = Date.now();
+
+    let entry = this.counts[provider];
+    if (!entry || now > entry.resetTime) {
+      entry = { count: 0, resetTime: now + 60000 };
+      this.counts[provider] = entry;
+    }
+
+    entry.count++;
+
+    const limits: Record<string, number> = { gemini: 15, groq: 30, cohere: 20 };
+    const limit = limits[provider] || 15;
+    const allowed = entry.count <= limit;
+
+    return new Response(JSON.stringify({ allowed, count: entry.count, limit, resetTime: entry.resetTime }), {
       headers: { 'Content-Type': 'application/json' },
     });
   }

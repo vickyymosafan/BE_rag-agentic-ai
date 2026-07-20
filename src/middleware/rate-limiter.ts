@@ -22,3 +22,15 @@ export async function rateLimitMiddleware(
 
   await next();
 }
+
+export async function checkProviderRateLimit(
+  provider: string,
+  env: CloudflareBindings
+): Promise<{ allowed: boolean; remaining: number }> {
+  const doId = env.PROVIDER_RATE_LIMITER.idFromName(provider);
+  const stub = env.PROVIDER_RATE_LIMITER.get(doId);
+
+  const res = await stub.fetch(`http://internal/check?provider=${provider}`);
+  const data = await res.json() as { allowed: boolean; count: number; limit: number };
+  return { allowed: data.allowed, remaining: Math.max(0, data.limit - data.count) };
+}
