@@ -33,12 +33,91 @@ export async function adaptiveRetrieve(
   }
 
   const embedding = await embedQuery(query, env);
-  const [vectorResults, bm25Results] = await Promise.all([
+  const [vectorResults, bm25Results, domainResults] = await Promise.all([
     vectorSearch(embedding, adjustedTopK, env, docFilter),
     bm25Search(query, adjustedTopK, env),
+    retrieveDomainSpecific(query, type, env, docFilter),
   ]);
 
-  return fusionWeighted(vectorResults, bm25Results, strategy);
+  const fused = fusionWeighted(vectorResults, bm25Results, strategy);
+  return [...fused, ...domainResults].sort((a, b) => b.score - a.score);
+}
+
+async function retrieveDomainSpecific(
+  query: string,
+  type: QueryType,
+  env: CloudflareBindings,
+  docFilter?: string[]
+): Promise<RetrievalResult[]> {
+  if (type === 'image') return retrieveImages(query, env, docFilter);
+  if (type === 'table') return retrieveTables(query, env, docFilter);
+  return [];
+}
+
+async function retrieveImages(
+  query: string,
+  env: CloudflareBindings,
+  docFilter?: string[]
+): Promise<RetrievalResult[]> {
+  let sql = 'SELECT id, doc_id, r2_key, mime_type, page_number, caption FROM extracted_images WHERE 1=1';
+  const params: unknown[] = [];
+
+  if (docFilter?.length) {
+    sql += ' AND doc_id IN (' + docFilter.map(() => '?').join(',') + ')';
+    params.push(...docFilter);
+  }
+
+  sql += ' ORDER BY page_number LIMIT 5';
+  const { results } = await env.DB.prepare(sql).bind(...params).all();
+
+  return (results as Array<Record<string, unknown>>).map((r, i) => ({
+    chunkId: `${r.id}`,
+    docId: `${r.doc_id}`,
+    content: `${r.caption || 'Gambar'} — ${r.mime_type || 'image/png'} (Hal ${r.page_number || 1})`,
+    contentType: 'image_ref',
+    pageNumber: (r.page_number as number) || 1,
+    sectionTitle: r.caption as string || 'Gambar',
+    score: 0.7 - (i * 0.05),
+    source: 'fusion' as const,
+  }));
+}
+
+async function retrieveTables(
+  query: string,
+  env: CloudflareBindings,
+  docFilter?: string[]
+): Promise<RetrievalResult[]> {
+  let sql = 'SELECT id, doc_id, page_number, caption, table_markdown FROM extracted_tables WHERE 1=1';
+  const params: unknown[] = [];
+
+  if (docFilter?.length) {
+    sql += ' AND doc_id IN (' + docFilter.map(() => '?').join(',') + ')';
+    params.push(...docFilter);
+  }
+
+  const lowerQuery = query.toLowerCase();
+  const tableKeywords = lowerQuery.split(/\s+/).filter(w => w.length > 3);
+  if (tableKeywords.length > 0) {
+    const likeClauses = tableKeywords.map(() => " (table_markdown LIKE ? OR caption LIKE ?) ");
+    sql += ' AND (' + likeClauses.join(' OR ') + ')';
+    for (const kw of tableKeywords) {
+      params.push(`%${kw}%`, `%${kw}%`);
+    }
+  }
+
+  sql += ' ORDER BY page_number LIMIT 5';
+  const { results } = await env.DB.prepare(sql).bind(...params).all();
+
+  return (results as Array<Record<string, unknown>>).map((r, i) => ({
+    chunkId: `${r.id}`,
+    docId: `${r.doc_id}`,
+    content: `\n[TABEL ${r.caption || ''}]\n${r.table_markdown || ''}`,
+    contentType: 'table',
+    pageNumber: (r.page_number as number) || 1,
+    sectionTitle: (r.caption as string) || 'Tabel',
+    score: 0.75 - (i * 0.05),
+    source: 'fusion' as const,
+  }));
 }
 
 function fusionWeighted(

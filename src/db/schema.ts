@@ -8,7 +8,7 @@ export const DB_SCHEMA = {
       total_pages INTEGER DEFAULT 0,
       total_images INTEGER DEFAULT 0,
       total_tables INTEGER DEFAULT 0,
-      status TEXT NOT NULL DEFAULT 'pending',
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'ready', 'error', 'deleted')),
       version INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
