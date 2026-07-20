@@ -39,16 +39,29 @@
   "durable_objects": {
     "bindings": [
       {
-        "binding": "RATE_LIMITER",
+        "name": "RATE_LIMITER",
         "class_name": "RateLimiterDO"
       },
       {
-        "binding": "PROVIDER_RATE_LIMITER",
+        "name": "PROVIDER_RATE_LIMITER",
         "class_name": "ProviderRateLimiterDO"
       }
     ]
   },
-  "migrations": {
-    "tag": "v1"
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["RateLimiterDO", "ProviderRateLimiterDO"]
+    }
+  ],
+  "exports": {
+    "RateLimiterDO": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    },
+    "ProviderRateLimiterDO": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
   }
 }

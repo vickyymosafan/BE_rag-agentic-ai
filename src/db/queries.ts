@@ -1,14 +1,8 @@
 import type { CloudflareBindings, RetrievalResult } from '../types';
 
-const VECTOR_QUERY = `
-  SELECT chunk_id, doc_id, content, content_type, page_number, section_title, score
-  FROM chunks
-  WHERE rowid IN (
-    SELECT rowid FROM vector_distance($1, $2)
-    ORDER BY distance ASC
-    LIMIT $3
-  )
-`;
+function sanitizeFTS5(query: string): string {
+  return query.replace(/["()*^$\\]/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
 export async function vectorSearch(
   embedding: number[],
@@ -46,6 +40,9 @@ export async function bm25Search(
   topK: number,
   env: CloudflareBindings
 ): Promise<RetrievalResult[]> {
+  const safeQuery = sanitizeFTS5(query);
+  if (!safeQuery) return [];
+
   const stmt = env.DB.prepare(
     `SELECT c.id as chunk_id, c.doc_id, c.content, c.content_type,
             c.page_number, c.section_title, rank as score
@@ -55,7 +52,7 @@ export async function bm25Search(
      ORDER BY rank
      LIMIT ?`
   );
-  const { results } = await stmt.bind(query, topK).all();
+  const { results } = await stmt.bind(safeQuery, topK).all();
 
   return (results as Array<{
     chunk_id: string; doc_id: string; content: string;
