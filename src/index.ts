@@ -15,6 +15,7 @@ import { decomposeQuery } from './asi/sub-question';
 import { selfCritic } from './asi/critic';
 import { correctiveRAG } from './asi/corrective';
 import { multiHopRetrieve } from './asi/multi-hop';
+import { rerankChunks } from './asi/rerank';
 import { invalidateDocCache } from './asi/cache-invalidation';
 import { trackRPDCall, checkRPDLimit, getRPDStats } from './utils/rpd-tracker';
 import { getTopCachedQueries } from './asi/cache';
@@ -173,6 +174,11 @@ const route = app.post('/api/rag/query', zValidator('json', querySchema), async 
         reasoningPath.push(...hops);
         reasoningPath.push(`Multi-hop: ${topResults.length} chunks after ${hops.length} hop(s)`);
       }
+    }
+
+    if (topResults.length > 3) {
+      topResults = await rerankChunks(topResults, query, env);
+      reasoningPath.push(`Rerank applied: ${topResults.length} chunks re-scored`);
     }
 
     if (shouldAbstain(topResults)) {

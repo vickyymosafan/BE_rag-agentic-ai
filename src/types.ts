@@ -52,7 +52,7 @@ export interface RetrievalResult {
   pageNumber: number;
   sectionTitle: string;
   score: number;
-  source: 'vector' | 'bm25' | 'fusion';
+  source: 'vector' | 'bm25' | 'fusion' | 'rerank';
 }
 
 export interface CacheEntry {
