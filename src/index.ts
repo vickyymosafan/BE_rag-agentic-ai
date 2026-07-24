@@ -416,4 +416,5 @@ app.get('/api/admin/faq', async (c) => {
 });
 
 export type AppType = typeof app;
+export { RateLimiterDO, ProviderRateLimiterDO } from './types';
 export default app;
